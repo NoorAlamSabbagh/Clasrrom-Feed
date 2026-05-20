@@ -41,10 +41,15 @@ app.get('/feed', async (req, res) => {
   try {
     // Try to get from Redis first if connected
     if (redisClient.isConnected()) {
-      const cachedFeeds = await redisClient.get('feeds');
-      if (cachedFeeds) {
-        console.log('Serving from cache');
-        return res.json(JSON.parse(cachedFeeds));
+      try {
+        const cachedFeeds = await redisClient.get('feeds');
+        if (cachedFeeds) {
+          console.log('Serving from cache');
+          return res.json(JSON.parse(cachedFeeds));
+        }
+      } catch (redisErr) {
+        console.error('Redis GET error:', redisErr);
+        // Continue to DB if Redis fails
       }
     }
 
@@ -54,13 +59,17 @@ app.get('/feed', async (req, res) => {
 
     // Store in Redis for 60 seconds if connected
     if (redisClient.isConnected()) {
-      await redisClient.setEx('feeds', 60, JSON.stringify(feeds));
+      try {
+        await redisClient.setEx('feeds', 60, JSON.stringify(feeds));
+      } catch (redisErr) {
+        console.error('Redis SET error:', redisErr);
+      }
     }
     
     console.log('Serving from DB');
     res.json(feeds);
   } catch (err) {
-    console.error(err);
+    console.error('API Error:', err);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
@@ -68,28 +77,32 @@ app.get('/feed', async (req, res) => {
 // POST /feed
 app.post('/feed', async (req, res) => {
   const { content, author } = req.body;
-  if (!content || !author) {
-    return res.status(400).json({ error: 'Content and author are required' });
+  if (!content || !author || content.trim() === '' || author.trim() === '') {
+    return res.status(400).json({ error: 'Content and author are required and cannot be empty' });
   }
 
   try {
     const result = await db.query(
       'INSERT INTO feeds (content, author) VALUES ($1, $2) RETURNING *',
-      [content, author]
+      [content.trim(), author.trim()]
     );
     const newFeed = result.rows[0];
 
     // Invalidate Redis cache if connected
     if (redisClient.isConnected()) {
-      await redisClient.del('feeds');
+      try {
+        await redisClient.del('feeds');
+      } catch (redisErr) {
+        console.error('Redis DEL error:', redisErr);
+      }
     }
 
-    // Emit realtime update
+    // Emit realtime update to all connected clients
     io.emit('new-feed', newFeed);
 
     res.status(201).json(newFeed);
   } catch (err) {
-    console.error(err);
+    console.error('API Error:', err);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });

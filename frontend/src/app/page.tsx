@@ -16,11 +16,15 @@ export default function Home() {
   const [feeds, setFeeds] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState(socket.connected);
+  const [isConnected, setIsConnected] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
   useEffect(() => {
+    setMounted(true);
+    setIsConnected(socket.connected);
+
     // Fetch initial feeds
     const fetchFeeds = async () => {
       try {
@@ -70,12 +74,14 @@ export default function Home() {
           <p className="mt-3 text-xl text-gray-500">
             Real-time updates from your coaches
           </p>
-          <div className="mt-4 flex justify-center items-center gap-2">
-            <span className={`h-3 w-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
-            <span className="text-sm text-gray-600">
-              {isConnected ? 'Connected' : 'Disconnected (Attempting to reconnect...)'}
-            </span>
-          </div>
+          {mounted && (
+            <div className="mt-4 flex justify-center items-center gap-2">
+              <span className={`h-3 w-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
+              <span className="text-sm text-gray-600">
+                {isConnected ? 'Connected' : 'Disconnected (Attempting to reconnect...)'}
+              </span>
+            </div>
+          )}
         </header>
 
         {loading ? (
